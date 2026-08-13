@@ -1,11 +1,8 @@
 {
-    "name": "dextinity-site-preview-chart",
+    "name": "dextinity-site-preview",
     "version": "1.0.0",
     "private": true,
     "description": "Helm chart for a Dextinity Site-Preview Microservice.",
-    "workspaces": [
-        "charts/*"
-    ],
     "scripts": {
         "prepare": "husky",
         "changeset:version": "changeset version && node sync-versions.js"
