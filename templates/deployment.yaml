@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dextinity-site-preview.fullname" . }}
+  labels:
+    {{- include "dextinity-site-preview.labels" . | nindent 4 }}
+{{- range $key, $val := .Values.additionalDeploymentLabels }}
+    {{ $key }}: {{ $val | quote }}
+{{- end }}
+{{- with .Values.additionalDeploymentAnnotations }}
+  annotations:
+{{- range $key, $val := . }}
+    {{ $key }}: {{ $val | quote }}
+{{- end }}
+{{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dextinity-site-preview.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- if .Values.env }}
+        checksum/config-map: {{ include (print $.Template.BasePath "/config-map.yaml") . | sha256sum }}
+{{- end }}
+{{- if .Values.image.pullSecret }}
+        checksum/image-pull-secret: {{ include (print $.Template.BasePath "/image-pull-secret.yaml") . | sha256sum }}
+{{- end }}
+{{- if .Values.secrets }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+{{- end }}
+      labels:
+        {{- include "dextinity-site-preview.selectorLabels" . | nindent 8 }}
+{{- range $key, $val := .Values.additionalPodLabels }}
+        {{ $key }}: {{ $val | quote }}
+{{- end }}
+    spec:
+{{- if .Values.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ include "dextinity-site-preview.fullname" . }}-image-pull-secret
+{{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      automountServiceAccountToken: {{ .Values.autoMountServiceAccountToken }}
+      initContainers:
+        - name: {{ .Chart.Name }}-build
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- if .Values.image.tag }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- else }}
+          image: "{{ .Values.image.repository }}@{{ .Values.image.hash }}"
+{{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/bash", "-c", "next build"]
+          envFrom:
+{{- if .Values.env }}
+            - configMapRef:
+                name: {{ include "dextinity-site-preview.fullname" . }}
+{{- end }}
+{{- range $key, $val := .Values.additionalConfigMapNames }}
+            - configMapRef:
+                name:  {{ $val }}
+{{- end }}
+{{- if .Values.secrets }}
+            - secretRef:
+                name: {{ include "dextinity-site-preview.fullname" . }}
+{{- end }}
+{{- range $key, $val := .Values.additionalSecretNames }}
+            - secretRef:
+                name:  {{ $val }}
+{{- end }}
+          volumeMounts:
+            - mountPath: /opt/app-root/src/.next
+              name: document-root
+          resources:
+            {{- toYaml .Values.initContainer.resources | nindent 12 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- if .Values.image.tag }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- else }}
+          image: "{{ .Values.image.repository }}@{{ .Values.image.hash }}"
+{{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+{{- if .Values.env }}
+            - configMapRef:
+                name: {{ include "dextinity-site-preview.fullname" . }}
+{{- end }}
+{{- range $key, $val := .Values.additionalConfigMapNames }}
+            - configMapRef:
+                name:  {{ $val }}
+{{- end }}
+{{- if .Values.secrets }}
+            - secretRef:
+                name: {{ include "dextinity-site-preview.fullname" . }}
+{{- end }}
+{{- range $key, $val := .Values.additionalSecretNames }}
+            - secretRef:
+                name:  {{ $val }}
+{{- end }}
+          env:
+            - name: NPM_RUN
+              value: "{{ .Values.npmRun }}"
+          volumeMounts:
+            - mountPath: /opt/app-root/src/.next
+              name: document-root
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: http
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+      volumes:
+        - name: document-root
+          emptyDir: {}
